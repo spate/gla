@@ -1,1 +1,21 @@
 OpenGL utility functions for Go
+
+This package provides utility functions for tighter integration
+with Go than a more conservative wrapping might provide. It is
+intended to be used in conjunction with such a wrapper.
+Currently, it depends lightly on github.com/banthar/gl
+
+Utility function list:
+
+TexImage2DFromImage (*)
+ - load texture image from image.Image
+
+TexSubImage2DFromImage (*)
+ - load texture subimage from image.Image
+
+
+(*) indicates untested
+
+
+This package is provided under a Clear BSD License.
+

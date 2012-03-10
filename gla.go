@@ -39,40 +39,39 @@ import "image"
 import "image/draw"
 import "github.com/banthar/gl"
 
-type GLenum C.GLenum
-type GLbitfield C.GLbitfield
-type GLclampf C.GLclampf
-type GLclampd C.GLclampd
+type GLenum gl.GLenum
+type GLbitfield gl.GLbitfield
+type GLclampf gl.GLclampf
+type GLclampd gl.GLclampd
 
 type Pointer unsafe.Pointer
 
 // those types are left for compatibility reasons
-type GLboolean C.GLboolean
-type GLbyte C.GLbyte
-type GLshort C.GLshort
-type GLint C.GLint
-type GLsizei C.GLsizei
-type GLubyte C.GLubyte
-type GLushort C.GLushort
-type GLuint C.GLuint
-type GLfloat C.GLfloat
-type GLdouble C.GLdouble
-
+type GLboolean gl.GLboolean
+type GLbyte gl.GLbyte
+type GLshort gl.GLshort
+type GLint gl.GLint
+type GLsizei gl.GLsizei
+type GLubyte gl.GLubyte
+type GLushort gl.GLushort
+type GLuint gl.GLuint
+type GLfloat gl.GLfloat
+type GLdouble gl.GLdouble
 
 type imageInfo struct {
-	Data		[]uint8
-	RowLength	int
-	Format		GLenum
-	Type		GLenum
-	Compressed	bool
+	Data       []uint8
+	RowLength  int
+	Format     GLenum
+	Type       GLenum
+	Compressed bool
 }
 
 // Returns GL parameters for loading data from the subrect "r" of image "img"
 func getImageInfo(i image.Image) imageInfo {
-	var data	[]uint8
-	var stride	int
-	var bpp		int
-	var info	imageInfo
+	var data []uint8
+	var stride int
+	var bpp int
+	var info imageInfo
 
 	switch i.(type) {
 	case *image.Alpha:
@@ -112,7 +111,7 @@ func getImageInfo(i image.Image) imageInfo {
 	info.Data = data
 	info.RowLength = stride / bpp
 
-	if stride % bpp != 0 {
+	if stride%bpp != 0 {
 		panic("gla: stride isn't usable with OpenGL")
 	}
 
@@ -159,7 +158,7 @@ func TexSubImage2DFromImage(target GLenum, level int, dest image.Rectangle, pixe
 	img, b := pixels.(image.Image)
 	if b {
 		bounds := img.Bounds()
-		if (dest.Dx() > bounds.Dx() || dest.Dy() > bounds.Dy()) {
+		if dest.Dx() > bounds.Dx() || dest.Dy() > bounds.Dy() {
 			return
 		}
 		info := getImageInfo(img)
@@ -181,5 +180,3 @@ func TexSubImage2DFromImage(target GLenum, level int, dest image.Rectangle, pixe
 		panic("gla: invalid interface type; must be an image type")
 	}
 }
-
-

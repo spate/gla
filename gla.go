@@ -121,62 +121,56 @@ func getImageInfo(i image.Image) imageInfo {
 // TexImage2DFromImage loads texture data from an image.Image into the currently
 // bound GL texture using the glTexImage2D call. If you wish to load only part of
 // an image, pass a subimage as the argument.
+//
+// Precondition: no buffer object bound to PIXEL_UNPACK_BUFFER
+//
+// Additional state modified: UNPACK_ALIGNMENT, UNPACK_ROW_LENGTH
+func TexImage2DFromImage(target GLenum, level int, internalformat int, border int, img image.Image) {
+	bounds := img.Bounds()
+	if bounds.Empty() {
+		return
+	}
 
-// Additional state modified: UNPACK_ALIGNMENT, UNPACK_ROW_LENGTH, PIXEL_UNPACK_BUFFER
-func TexImage2DFromImage(target GLenum, level int, internalformat int, border int, pixels interface{}) {
-	img, b := pixels.(image.Image)
-	if b {
-		bounds := img.Bounds()
-		if bounds.Empty() {
-			return
-		}
-		info := getImageInfo(img)
+	info := getImageInfo(img)
 
-		C.glBindBuffer(C.GLenum(gl.PIXEL_UNPACK_BUFFER), C.GLuint(0))
-
-		if info.Compressed {
-			// TODO
-		} else {
-			C.glPixelStorei(C.GLenum(gl.UNPACK_ALIGNMENT), C.GLint(1))
-			C.glPixelStorei(C.GLenum(gl.UNPACK_ROW_LENGTH), C.GLint(info.RowLength))
-			C.glTexImage2D(C.GLenum(target), C.GLint(level), C.GLint(internalformat),
-				C.GLsizei(bounds.Dx()), C.GLsizei(bounds.Dy()), C.GLint(border),
-				C.GLenum(info.Format), C.GLenum(info.Type),
-				unsafe.Pointer(reflect.ValueOf(info.Data).UnsafeAddr()))
-		}
+	if info.Compressed {
+		// unhandled by this function
+		return
 	} else {
-		panic("gla: invalid interface type; must be an image type")
+		C.glPixelStorei(C.GLenum(gl.UNPACK_ALIGNMENT), C.GLint(1))
+		C.glPixelStorei(C.GLenum(gl.UNPACK_ROW_LENGTH), C.GLint(info.RowLength))
+		C.glTexImage2D(C.GLenum(target), C.GLint(level), C.GLint(internalformat),
+			C.GLsizei(bounds.Dx()), C.GLsizei(bounds.Dy()), C.GLint(border),
+			C.GLenum(info.Format), C.GLenum(info.Type),
+			unsafe.Pointer(reflect.ValueOf(info.Data).UnsafeAddr()))
 	}
 }
 
 // TexSubImage2DFromImage loads texture data from an image.Image into the currently
 // bound GL texture using the glTexSubImage2D call. If you wish to load only part of
 // an image, pass a subimage as the argument.
+//
+// Precondition: no buffer object bound to PIXEL_UNPACK_BUFFER
+//
+// Additional state modified: UNPACK_ALIGNMENT, UNPACK_ROW_LENGTH
+func TexSubImage2DFromImage(target GLenum, level int, dest image.Rectangle, img image.Image) {
+	bounds := img.Bounds()
+	if dest.Dx() > bounds.Dx() || dest.Dy() > bounds.Dy() {
+		return
+	}
 
-// Additional state modified: UNPACK_ALIGNMENT, UNPACK_ROW_LENGTH, PIXEL_UNPACK_BUFFER
-func TexSubImage2DFromImage(target GLenum, level int, dest image.Rectangle, pixels interface{}) {
-	img, b := pixels.(image.Image)
-	if b {
-		bounds := img.Bounds()
-		if dest.Dx() > bounds.Dx() || dest.Dy() > bounds.Dy() {
-			return
-		}
-		info := getImageInfo(img)
+	info := getImageInfo(img)
 
-		C.glBindBuffer(C.GLenum(gl.PIXEL_UNPACK_BUFFER), C.GLuint(0))
-
-		if info.Compressed {
-			// TODO
-		} else {
-			C.glPixelStorei(C.GLenum(gl.UNPACK_ALIGNMENT), C.GLint(1))
-			C.glPixelStorei(C.GLenum(gl.UNPACK_ROW_LENGTH), C.GLint(info.RowLength))
-			C.glTexSubImage2D(C.GLenum(target), C.GLint(level),
-				C.GLint(dest.Min.X), C.GLint(dest.Min.Y),
-				C.GLsizei(dest.Dx()), C.GLsizei(dest.Dy()),
-				C.GLenum(info.Format), C.GLenum(info.Type),
-				unsafe.Pointer(reflect.ValueOf(info.Data).UnsafeAddr()))
-		}
+	if info.Compressed {
+		// unhandled by this function
+		return
 	} else {
-		panic("gla: invalid interface type; must be an image type")
+		C.glPixelStorei(C.GLenum(gl.UNPACK_ALIGNMENT), C.GLint(1))
+		C.glPixelStorei(C.GLenum(gl.UNPACK_ROW_LENGTH), C.GLint(info.RowLength))
+		C.glTexSubImage2D(C.GLenum(target), C.GLint(level),
+			C.GLint(dest.Min.X), C.GLint(dest.Min.Y),
+			C.GLsizei(dest.Dx()), C.GLsizei(dest.Dy()),
+			C.GLenum(info.Format), C.GLenum(info.Type),
+			unsafe.Pointer(reflect.ValueOf(info.Data).UnsafeAddr()))
 	}
 }

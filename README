@@ -7,12 +7,16 @@ Currently, it depends lightly on github.com/banthar/gl
 
 Utility function list:
 
-TexImage2DFromImage (*)
+TexImage2DFromImage
  - load texture image from image.Image
 
 TexSubImage2DFromImage (*)
  - load texture subimage from image.Image
 
+CompressedTexImage2DFromImage
+ - load texture image from image.Image
+ - only accepts Dxt1,Dxt3,Dxt5 (from glimage pkg)
+ - see github.com/spate/glimage/dds for a DDS loader
 
 (*) indicates untested
 

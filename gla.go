@@ -17,15 +17,15 @@
 
 package gla
 
-// #cgo darwin LDFLAGS: -L/opt/local/lib -framework OpenGL -lGLEW
+// #cgo darwin LDFLAGS: -framework OpenGL
+// #cgo darwin pkg-config: glew
 // #cgo windows LDFLAGS: -lglew32 -lopengl32
 // #cgo linux LDFLAGS: -lGLEW -lGL
-// #cgo darwin CFLAGS: -I/opt/local/include
 //
 // #include <stdlib.h>
 //
 // #ifdef __APPLE__
-// # include "GL/glew.h"
+// # include "glew.h"
 // #else
 // # include <GL/glew.h>
 // #endif

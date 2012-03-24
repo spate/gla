@@ -194,15 +194,15 @@ func getCompressedImageInfo(i image.Image) (imageInfo, error) {
 	case *glimage.Dxt1:
 		img, _ := i.(*glimage.Dxt1)
 		data, stride, blockdim, blocksize = img.Pix, img.Stride, 4, 8
-		info.Format = COMPRESSED_RGBA_S3TC_DXT1_EXT
+		info.Format = COMPRESSED_RGBA_S3TC_DXT1
 	case *glimage.Dxt3:
 		img, _ := i.(*glimage.Dxt3)
 		data, stride, blockdim, blocksize = img.Pix, img.Stride, 4, 16
-		info.Format = COMPRESSED_RGBA_S3TC_DXT3_EXT
+		info.Format = COMPRESSED_RGBA_S3TC_DXT3
 	case *glimage.Dxt5:
 		img, _ := i.(*glimage.Dxt5)
 		data, stride, blockdim, blocksize = img.Pix, img.Stride, 4, 16
-		info.Format = COMPRESSED_RGBA_S3TC_DXT5_EXT
+		info.Format = COMPRESSED_RGBA_S3TC_DXT5
 	default:
 		return imageInfo{}, fmt.Errorf("gla: unrecognized texture format")
 	}

@@ -113,6 +113,10 @@ func getImageInfo(i image.Image) imageInfo {
 		img, _ := i.(*image.RGBA64)
 		data, stride, bpp = img.Pix, img.Stride, 8
 		info.Format, info.Type = gl.RGBA, gl.UNSIGNED_SHORT
+	case *glimage.BGRA:
+		img, _ := i.(*glimage.BGRA)
+		data, stride, bpp = img.Pix, img.Stride, 4
+		info.Format, info.Type = gl.BGRA, gl.UNSIGNED_BYTE
 	default:
 		// for unknown types, convert to RGBA8
 		r := i.Bounds()

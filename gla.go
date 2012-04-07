@@ -63,8 +63,9 @@ type GLfloat gl.GLfloat
 type GLdouble gl.GLdouble
 
 type imageInfo struct {
-	Data      []uint8
+	Data      unsafe.Pointer
 	RowLength int
+	Length    int
 	Format    GLenum
 	Type      GLenum
 }
@@ -79,58 +80,83 @@ const (
 	COMPRESSED_SRGB_ALPHA_S3TC_DXT1 = 0x8C4D
 	COMPRESSED_SRGB_ALPHA_S3TC_DXT3 = 0x8C4E
 	COMPRESSED_SRGB_ALPHA_S3TC_DXT5 = 0x8C4F
+	UNSIGNED_BYTE_3_3_2             = 0x8032
+	UNSIGNED_SHORT_4_4_4_4          = 0x8033
+	UNSIGNED_SHORT_5_5_5_1          = 0x8034
+	UNSIGNED_INT_8_8_8_8            = 0x8035
+	UNSIGNED_INT_10_10_10_2         = 0x8036
+	UNSIGNED_BYTE_2_3_3_REV         = 0x8362
+	UNSIGNED_SHORT_5_6_5            = 0x8363
+	UNSIGNED_SHORT_5_6_5_REV        = 0x8364
+	UNSIGNED_SHORT_4_4_4_4_REV      = 0x8365
+	UNSIGNED_SHORT_1_5_5_5_REV      = 0x8366
+	UNSIGNED_INT_8_8_8_8_REV        = 0x8367
+	UNSIGNED_INT_2_10_10_10_REV     = 0x8368
 )
 
 // Returns GL parameters for loading data from the subrect "r" of image "img"
 func getImageInfo(i image.Image) imageInfo {
-	var data []uint8
+	var data reflect.Value
 	var stride int
-	var bpp int
+	var epp int // elements per pixel
 	var info imageInfo
 
 	switch i.(type) {
 	case *image.Alpha:
 		img, _ := i.(*image.Alpha)
-		data, stride, bpp = img.Pix, img.Stride, 1
+		data, stride, epp = reflect.ValueOf(img.Pix), img.Stride, 1
 		info.Format, info.Type = gl.ALPHA, gl.UNSIGNED_BYTE
 	case *image.Alpha16:
 		img, _ := i.(*image.Alpha16)
-		data, stride, bpp = img.Pix, img.Stride, 2
+		data, stride, epp = reflect.ValueOf(img.Pix), img.Stride, 2
 		info.Format, info.Type = gl.ALPHA, gl.UNSIGNED_SHORT
 	case *image.Gray:
 		img, _ := i.(*image.Gray)
-		data, stride, bpp = img.Pix, img.Stride, 1
+		data, stride, epp = reflect.ValueOf(img.Pix), img.Stride, 1
 		info.Format, info.Type = gl.LUMINANCE, gl.UNSIGNED_BYTE
 	case *image.Gray16:
 		img, _ := i.(*image.Gray16)
-		data, stride, bpp = img.Pix, img.Stride, 2
+		data, stride, epp = reflect.ValueOf(img.Pix), img.Stride, 2
 		info.Format, info.Type = gl.LUMINANCE, gl.UNSIGNED_SHORT
 	case *image.RGBA:
 		img, _ := i.(*image.RGBA)
-		data, stride, bpp = img.Pix, img.Stride, 4
+		data, stride, epp = reflect.ValueOf(img.Pix), img.Stride, 4
 		info.Format, info.Type = gl.RGBA, gl.UNSIGNED_BYTE
 	case *image.RGBA64:
 		img, _ := i.(*image.RGBA64)
-		data, stride, bpp = img.Pix, img.Stride, 8
+		data, stride, epp = reflect.ValueOf(img.Pix), img.Stride, 8
 		info.Format, info.Type = gl.RGBA, gl.UNSIGNED_SHORT
 	case *glimage.BGRA:
 		img, _ := i.(*glimage.BGRA)
-		data, stride, bpp = img.Pix, img.Stride, 4
+		data, stride, epp = reflect.ValueOf(img.Pix), img.Stride, 4
 		info.Format, info.Type = gl.BGRA, gl.UNSIGNED_BYTE
+	case *glimage.BGRA4444:
+		img, _ := i.(*glimage.BGRA4444)
+		data, stride, epp = reflect.ValueOf(img.Pix), img.Stride, 1
+		info.Format, info.Type = gl.BGRA, UNSIGNED_SHORT_4_4_4_4_REV
+	case *glimage.BGRA5551:
+		img, _ := i.(*glimage.BGRA5551)
+		data, stride, epp = reflect.ValueOf(img.Pix), img.Stride, 1
+		info.Format, info.Type = gl.BGRA, UNSIGNED_SHORT_1_5_5_5_REV
+	case *glimage.BGR565:
+		img, _ := i.(*glimage.BGR565)
+		data, stride, epp = reflect.ValueOf(img.Pix), img.Stride, 1
+		info.Format, info.Type = gl.RGB, UNSIGNED_SHORT_5_6_5
 	default:
 		// for unknown types, convert to RGBA8
 		r := i.Bounds()
 		img := image.NewRGBA(r)
 		draw.Draw(img, r.Sub(r.Min), i, r.Min, draw.Src)
 		info.Format, info.Type = gl.RGBA, gl.UNSIGNED_BYTE
-		info.Data, info.RowLength = img.Pix, img.Stride/4
+		info.Data = unsafe.Pointer(reflect.ValueOf(img.Pix).Index(0).UnsafeAddr())
+		info.RowLength = img.Stride / 4
 		return info
 	}
 
-	info.Data = data
-	info.RowLength = stride / bpp
+	info.Data = unsafe.Pointer(data.Index(0).UnsafeAddr())
+	info.RowLength = stride / epp
 
-	if stride%bpp != 0 {
+	if stride%epp != 0 {
 		panic("gla: stride isn't usable with OpenGL")
 	}
 
@@ -151,14 +177,13 @@ func TexImage2DFromImage(target GLenum, level int, internalformat int, border in
 	}
 
 	info := getImageInfo(img)
-	ptr := unsafe.Pointer(reflect.ValueOf(info.Data).Index(0).UnsafeAddr())
 
 	C.glPixelStorei(C.GLenum(gl.UNPACK_ALIGNMENT), C.GLint(1))
 	C.glPixelStorei(C.GLenum(gl.UNPACK_ROW_LENGTH), C.GLint(info.RowLength))
 	C.glTexImage2D(C.GLenum(target), C.GLint(level), C.GLint(internalformat),
 		C.GLsizei(bounds.Dx()), C.GLsizei(bounds.Dy()), C.GLint(border),
 		C.GLenum(info.Format), C.GLenum(info.Type),
-		ptr)
+		info.Data)
 }
 
 // TexSubImage2DFromImage loads texture data from an image.Image into the currently
@@ -175,7 +200,6 @@ func TexSubImage2DFromImage(target GLenum, level int, dest image.Rectangle, img 
 	}
 
 	info := getImageInfo(img)
-	ptr := unsafe.Pointer(reflect.ValueOf(info.Data).Index(0).UnsafeAddr())
 
 	C.glPixelStorei(C.GLenum(gl.UNPACK_ALIGNMENT), C.GLint(1))
 	C.glPixelStorei(C.GLenum(gl.UNPACK_ROW_LENGTH), C.GLint(info.RowLength))
@@ -183,7 +207,7 @@ func TexSubImage2DFromImage(target GLenum, level int, dest image.Rectangle, img 
 		C.GLint(dest.Min.X), C.GLint(dest.Min.Y),
 		C.GLsizei(dest.Dx()), C.GLsizei(dest.Dy()),
 		C.GLenum(info.Format), C.GLenum(info.Type),
-		ptr)
+		info.Data)
 }
 
 // Returns GL parameters for loading data from the subrect "r" of image "img"
@@ -233,7 +257,8 @@ func getCompressedImageInfo(i image.Image) (imageInfo, error) {
 		}
 		data = pix
 	}
-	info.Data = data
+	info.Data = unsafe.Pointer(reflect.ValueOf(data).Index(0).UnsafeAddr())
+	info.Length = len(data)
 
 	return info, nil
 }
@@ -253,9 +278,7 @@ func CompressedTexImage2DFromImage(target GLenum, level int, border int, img ima
 		return
 	}
 
-	ptr := unsafe.Pointer(reflect.ValueOf(info.Data).Index(0).UnsafeAddr())
-
 	C.glCompressedTexImage2D(C.GLenum(target), C.GLint(level), C.GLenum(info.Format),
 		C.GLsizei(bounds.Dx()), C.GLsizei(bounds.Dy()), C.GLint(border),
-		C.GLsizei(len(info.Data)), ptr)
+		C.GLsizei(info.Length), info.Data)
 }

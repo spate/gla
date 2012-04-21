@@ -18,6 +18,21 @@ CompressedTexImage2DFromImage
  - only accepts Dxt1,Dxt3,Dxt5 (from glimage pkg)
  - see github.com/spate/glimage/dds for a DDS loader
 
+BufferData
+BufferSubData (*)
+ - wraps glBufferData, glBufferSubData
+ - accepts pointers and slices to plain old data
+
+VertexAttribSlice
+ - wraps glVertexAttribPointer usage with VBOs
+
+VertexSlice
+NormalSlice (*)
+ColorSlice (*)
+TexCoordSlice
+ - wrap equivalent glBlahPointer functions
+
+
 (*) indicates untested
 
 

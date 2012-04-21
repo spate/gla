@@ -62,6 +62,17 @@ type GLuint gl.GLuint
 type GLfloat gl.GLfloat
 type GLdouble gl.GLdouble
 
+func glBool(b bool) C.GLboolean {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+//
+// Texture functions
+//
+
 type imageInfo struct {
 	Data      unsafe.Pointer
 	RowLength int
@@ -281,4 +292,231 @@ func CompressedTexImage2DFromImage(target GLenum, level int, border int, img ima
 	C.glCompressedTexImage2D(C.GLenum(target), C.GLint(level), C.GLenum(info.Format),
 		C.GLsizei(bounds.Dx()), C.GLsizei(bounds.Dy()), C.GLint(border),
 		C.GLsizei(info.Length), info.Data)
+}
+
+//
+// Buffer Functions
+//
+
+type sliceInfo struct {
+	Ptr    uintptr
+	Size   uintptr
+	Length uintptr
+}
+
+func sliceToUintptr(slice interface{}) (data sliceInfo, err error) {
+	val := reflect.ValueOf(slice)
+	switch val.Type().Kind() {
+	case reflect.Ptr:
+		if val.IsNil() {
+			return sliceInfo{}, fmt.Errorf("gla: nil")
+		}
+		i := reflect.Indirect(val)
+		if i.Kind() == reflect.Array {
+			e := i.Index(0)
+			data.Ptr = e.UnsafeAddr()
+			data.Size = e.Type().Size()
+			data.Length = uintptr(i.Len())
+		} else {
+			data.Ptr = i.UnsafeAddr()
+			data.Size = i.Type().Size()
+			data.Length = 1
+		}
+	case reflect.Slice:
+		if val.IsNil() {
+			return sliceInfo{}, fmt.Errorf("gla: nil")
+		}
+		e := val.Index(0)
+		data.Ptr = e.UnsafeAddr()
+		data.Size = e.Type().Size()
+		data.Length = uintptr(val.Len())
+	default:
+		return sliceInfo{}, fmt.Errorf("gla: not addressable")
+	}
+
+	//fmt.Printf("ptr=%v size=%v length=%v\n", data.Ptr, data.Size, data.Length)
+	return data, nil
+}
+
+// BufferData uses glBufferData to allocate memory for the bound GL buffer,
+// and fills it with the data in slice. slice can be either a slice or pointer.
+// Behaviour is undefined if the underlying data type is or contains anything
+// other than sized numeric types. (Structs and arrays are okay as long as they're
+// of sized numeric types. Pointers and slices are only allowed at the topmost level.)
+func BufferData(target GLenum, slice interface{}, usage GLenum) error {
+	data, e := sliceToUintptr(slice)
+	if e != nil {
+		return e
+	}
+	C.glBufferData(C.GLenum(target), C.GLsizeiptr(data.Size*data.Length), unsafe.Pointer(data.Ptr), C.GLenum(usage))
+	return nil
+}
+
+// BufferSubData uses glBufferSubData to update a section of the buffer
+// currently bound to target. The buffer's type is treated as being an array
+// of the same type as slice. Trying to set data off the end of the buffer
+// is not checked, and will likely result in a GL error.
+//
+// This function sets:
+//   buffer_bound_to_target[start:start+len(slice)] = slice[:]
+func BufferSubData(target GLenum, start_index int, slice interface{}) error {
+	data, e := sliceToUintptr(slice)
+	if e != nil {
+		return e
+	}
+	C.glBufferSubData(C.GLenum(target), C.GLintptr(uintptr(start_index)*data.Size), C.GLsizeiptr(data.Size*data.Length), unsafe.Pointer(data.Ptr))
+	return nil
+}
+
+//
+// Vertex Attrib Functions
+//
+
+func sliceFieldToGL(rtype reflect.Type) (gltype GLenum, err error) {
+	// In order for us to be able to bind a Go type as a vertex attribute,
+	// it needs to be in this list.
+	switch rtype.Kind() {
+	case reflect.Int8:
+		gltype = gl.BYTE
+	case reflect.Int16:
+		gltype = gl.SHORT
+	case reflect.Int32:
+		gltype = gl.INT
+	case reflect.Uint8:
+		gltype = gl.UNSIGNED_BYTE
+	case reflect.Uint16:
+		gltype = gl.UNSIGNED_SHORT
+	case reflect.Uint32:
+		gltype = gl.UNSIGNED_INT
+	case reflect.Float32:
+		gltype = gl.FLOAT
+	case reflect.Float64:
+		gltype = gl.DOUBLE
+	default:
+		return 0, fmt.Errorf("gla: invalid data type in reflection")
+	}
+	return gltype, nil
+}
+
+type attribInfo struct {
+	Gltype   GLenum
+	Elements int
+	Offset   uintptr
+	Stride   uintptr
+}
+
+func sliceAttrib(dummy interface{}, dummy_index int) (data attribInfo, err error) {
+	t := reflect.TypeOf(dummy)
+	data.Stride = t.Size()
+
+	switch t.Kind() {
+	case reflect.Struct:
+		sf := t.Field(int(dummy_index))
+		if sf.Type.Kind() == reflect.Array {
+			data.Gltype, err = sliceFieldToGL(sf.Type.Elem())
+			data.Elements, data.Offset = sf.Type.Len(), sf.Offset
+		} else {
+			data.Gltype, err = sliceFieldToGL(sf.Type)
+			data.Elements, data.Offset = 1, sf.Offset
+		}
+	case reflect.Array:
+		data.Gltype, err = sliceFieldToGL(t.Elem())
+		data.Elements, data.Offset = t.Len(), 0
+	default:
+		data.Gltype, err = sliceFieldToGL(t)
+		data.Elements, data.Offset = 1, 0
+	}
+
+	if err != nil {
+		return attribInfo{}, fmt.Errorf("gla: invalid type")
+	}
+
+	//fmt.Printf("type: %v  el: %v  off: %v  str: %v\n", data.Gltype, data.Elements, data.Offset, data.Stride)
+	return data, nil
+}
+
+// VertexAttribSlice uses glVertexAttribPointer to bind an element of the currently
+// bound buffer at the given index. In order to be able to determine the layout of
+// the buffer, you need to pass in an uninitialized element of the slice used to fill
+// the buffer. If dummy is a struct, the value you pass as dummy_index determines
+// which member of dummy to bind at attribute index.
+//
+// e.g.,
+//
+//   VertexAttribSlice(1, false, int32(0), 0)
+//
+// to bind an int32 slice to attrib 1, or,
+//
+//   VertexAttribSlice(3, true, s{}, 1)
+//
+// to bind the 1st element in struct s to attrib 3
+//
+// Precondition: VBO bound to ARRAY_BUFFER target containing data of array type dummy
+func VertexAttribSlice(index uint, normalized bool, dummy interface{}, dummy_index int) error {
+	data, err := sliceAttrib(dummy, dummy_index)
+	if err != nil {
+		return err
+	}
+
+	C.glVertexAttribPointer(C.GLuint(index), C.GLint(data.Elements), C.GLenum(data.Gltype), glBool(normalized), C.GLsizei(data.Stride), unsafe.Pointer(data.Offset))
+	return nil
+}
+
+// VertexSlice uses glVertexPointer to bind an element of the currently
+// bound buffer at the given index. See VertexAttribSlice for more details.
+//
+// Precondition: VBO bound to ARRAY_BUFFER target containing data of array type dummy
+func VertexSlice(dummy interface{}, dummy_index int) error {
+	data, err := sliceAttrib(dummy, dummy_index)
+	if err != nil {
+		return err
+	}
+
+	C.glVertexPointer(C.GLint(data.Elements), C.GLenum(data.Gltype), C.GLsizei(data.Stride), unsafe.Pointer(data.Offset))
+	return nil
+}
+
+// NormalSlice uses glNormalPointer to bind an element of the currently
+// bound buffer at the given index. See VertexAttribSlice for more details.
+//
+// Precondition: VBO bound to ARRAY_BUFFER target containing data of array type dummy
+func NormalSlice(dummy interface{}, dummy_index int) error {
+	data, err := sliceAttrib(dummy, dummy_index)
+	if err != nil {
+		return err
+	}
+	if data.Elements != 3 {
+		return fmt.Errorf("gla: invalid number of elements")
+	}
+
+	C.glNormalPointer(C.GLenum(data.Gltype), C.GLsizei(data.Stride), unsafe.Pointer(data.Offset))
+	return nil
+}
+
+// ColorSlice uses glColorPointer to bind an element of the currently
+// bound buffer at the given index. See VertexAttribSlice for more details.
+//
+// Precondition: VBO bound to ARRAY_BUFFER target containing data of array type dummy
+func ColorSlice(dummy interface{}, dummy_index int) error {
+	data, err := sliceAttrib(dummy, dummy_index)
+	if err != nil {
+		return err
+	}
+
+	C.glColorPointer(C.GLint(data.Elements), C.GLenum(data.Gltype), C.GLsizei(data.Stride), unsafe.Pointer(data.Offset))
+	return nil
+}
+
+// TexCoordSlice uses glVertexPointer to bind an element of the currently
+// bound buffer at the given index. See VertexAttribSlice for more details.
+//
+// Precondition: VBO bound to ARRAY_BUFFER target containing data of array type dummy
+func TexCoordSlice(dummy interface{}, dummy_index int) error {
+	data, err := sliceAttrib(dummy, dummy_index)
+	if err != nil {
+		return err
+	}
+
+	C.glTexCoordPointer(C.GLint(data.Elements), C.GLenum(data.Gltype), C.GLsizei(data.Stride), unsafe.Pointer(data.Offset))
+	return nil
 }
